@@ -1,7 +1,7 @@
 import pygame
 import serial
 import threading
-
+import random
 # For button
 WIDTH, HEIGHT = 800, 600
 
@@ -12,8 +12,8 @@ NOTE_HEIGHT = 10  # The height of the note
 SPAWN_OFFSET = 500
 BPM = 91
 BEAT_INTERVAL = 60 / BPM  # Seconds per beat
-distance_per_beat = 280  # Distance the note falls per beat in pixels
-NOTE_SPEED = distance_per_beat * BEAT_INTERVAL  # Pixels per second based on BPM
+distance_per_beat = 140  # Distance the note falls per beat in pixels
+NOTE_SPEED = distance_per_beat / BEAT_INTERVAL  # Pixels per second based on BPM
 
 #was distance_per_beat / BEAT_INTERVAL before, should be * for speed)
 # Corrected NOTE_SPEED calculation: If a note falls distance_per_beat in BEAT_INTERVAL seconds,
@@ -88,6 +88,7 @@ note_pattern = [(i, bitmask_to_lanes(tequila_beat_vals[i])) for i in range(len(t
 pygame.init()
 pygame.mixer.init()
 
+hit_sound = pygame.mixer.Sound("songs/hitsound.mp3")  
 # Set up the display
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption('ESP32 Rhythm Game')
@@ -163,6 +164,36 @@ class Note:
     def draw(self, surface):
         pygame.draw.rect(surface, GREEN, (self.x, self.y, NOTE_WIDTH, NOTE_HEIGHT))
 
+
+class Particle:
+    def __init__(self, x, y, color, size):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.size = size
+        self.velocity_x = random.uniform(-1, 1)
+        self.velocity_y = random.uniform(-2, -1) # Move upwards
+        self.lifetime = 1  # Lifetime in seconds
+
+    def update(self, delta_time):
+        self.x += self.velocity_x * 100 * delta_time
+        self.y += self.velocity_y * 100 * delta_time
+        self.size -= 0.5 * delta_time # Shrink over time
+        self.lifetime -= delta_time
+
+    def draw(self, surface):
+        if self.size > 0:
+            pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), int(self.size))
+
+particles = [] # Global list to hold particles
+
+def create_hit_effect(x, y):
+    num_particles = 20 # Adjust for desired density
+    for _ in range(num_particles):
+        color = (random.randint(100, 255), random.randint(0, 200), random.randint(0, 255)) # Example color
+        size = random.randint(4, 8)
+        particles.append(Particle(x, y, color, size))
+
 def play_song():
     pygame.time.wait(int(1.5 * 1000))
     if ser:
@@ -177,7 +208,7 @@ def play_song():
 
 # Start button function
 def start_game():
-    global game_state, start_time, first_note_time, score 
+    global game_state, start_time, first_note_time, score, particles 
     game_state = PLAYING
     # Calculate the time delay to sync with notes reaching near the red line
     fall_distance = HEIGHT - 100 - SPAWN_OFFSET  # Distance to red line
@@ -208,6 +239,13 @@ def read_from_serial():
                 if line == '1':
                         score += 1
                         print(f"Score incremented to: {score}")
+
+                        if hit_sound:
+                            hit_sound.play()
+
+                        hit_lane_x = WIDTH // 2 # Example center of screen
+                        hit_y = HEIGHT - 100  # Example hit line position
+                        create_hit_effect(hit_lane_x, hit_y)
 
 
 # Main game loop
@@ -266,6 +304,15 @@ def main_game():
             for note in notes:
                 note.update(delta_time)
                 note.draw(screen)
+
+            delta_time = clock.get_time() / 1000.0
+            for i in range(len(particles) - 1, -1, -1): # Iterate backwards for safe removal
+                particle = particles[i]
+                particle.update(delta_time)
+                if particle.lifetime <= 0 or particle.size <= 0:
+                    particles.pop(i)
+                else:
+                    particle.draw(screen)
 
             # Draw hit line
             pygame.draw.line(screen, RED, (0, HEIGHT - 100), (WIDTH, HEIGHT - 100), 5)
