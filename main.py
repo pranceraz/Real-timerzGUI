@@ -10,9 +10,12 @@ NUM_LANES = 4
 LANE_WIDTH = WIDTH // NUM_LANES
 NOTE_WIDTH = LANE_WIDTH - 20
 NOTE_HEIGHT = 20
-NOTE_SPEED = 300  # Pixels per second (tweak based on hit timing)
+NOTE_HEIGHT = 20  # The height of the note
+SPAWN_OFFSET = 200
 BPM = 120
 BEAT_INTERVAL = 60 / BPM  # Seconds per beat
+distance_per_beat = 100  # Distance the note falls per beat in pixels
+NOTE_SPEED = distance_per_beat * BEAT_INTERVAL  # Pixels per second based on BPM
 
 COM_PORT = 'COM4'
 
@@ -145,18 +148,21 @@ def play_song():
 
 # Start button function
 def start_game():
-    global game_state
+    global game_state, start_time, first_note_time
     if ser:
-        # Send start command to ESP32
+        # Send start command to ESP32 slightly before the notes reach the red line
         ser.write(b'START\n')
         game_state = PLAYING
 
-        # Start music thread
-        music_thread = threading.Thread(target=play_song, daemon=True)
-        music_thread.start()
+        # Calculate the time delay to sync with notes reaching near the red line
+        fall_distance = HEIGHT - 100 - SPAWN_OFFSET  # Distance to red line
+        fall_time = fall_distance / NOTE_SPEED  # Time in seconds for notes to reach the red line
+        
+        # Start music after the fall time to sync with the first notes
+        threading.Timer(fall_time - 0.1, play_song).start()  # Start the song slightly before notes hit the red line
+
     else:
         print("Serial connection not available")
-
 
 # Create start button
 start_button = Button(WIDTH//2 - 100, HEIGHT//2 - 50, 200, 100, "START", start_game)
