@@ -22,7 +22,7 @@ RED = (255, 0, 0)
 clock = pygame.time.Clock()
 FPS = 60
 
-SONG_PATH = 'tequila.mp3'
+SONG_PATH = 'songs/tequila.mp3'
 
 # Serial setup (adjust port as needed)
 try:
@@ -157,8 +157,6 @@ def main_game():
             # Process and draw start button
             start_button.process(events)
             start_button.draw(screen)
-
-        if game_state == PLAYING: 
             
             
         # Update display
