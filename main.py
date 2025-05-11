@@ -3,14 +3,18 @@ import serial
 import json
 import threading
 
-# Initialize Pygame
-pygame.init()
-pygame.mixer.init()
-
-# Set up the display
+# For button
 WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption('ESP32 Rhythm Game')
+
+NUM_LANES = 4
+LANE_WIDTH = WIDTH // NUM_LANES
+NOTE_WIDTH = LANE_WIDTH - 20
+NOTE_HEIGHT = 20
+NOTE_SPEED = 300  # Pixels per second (tweak based on hit timing)
+BPM = 120
+BEAT_INTERVAL = 60 / BPM  # Seconds per beat
+
+COM_PORT = 'COM4'
 
 # Colors
 BLACK = (0, 0, 0)
@@ -18,23 +22,61 @@ WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 
+FPS = 60
+SONG_PATH = 'songs/tequila.mp3'
+
+# Game states
+MENU = 0
+PLAYING = 1
+
+tequila_beat_vals = [
+    15, 15, 15, 15,
+    15, 15, 15, 15,
+    15, 15, 15, 15,
+    15, 15, 15, 15,
+    12, 3, 12, 3,
+    12, 3, 12, 3,
+    12, 3, 12, 3,
+    12, 3, 12, 3,
+    8, 4, 2, 14,
+    8, 4, 2,
+    8, 4, 2, 14,
+    8, 4, 2,
+    8, 4, 2, 14,
+    8, 4, 2,
+    8, 4, 2, 14,
+    8, 4, 2,
+    8, 8, 4, 4,
+    8, 4, 2, 2,
+    1, 1, 12, 3,
+    15
+]
+
+# Bitmask to lane mapping (pointer = lane 0, pinky = lane 3)
+def bitmask_to_lanes(val):
+    return [i for i, bit in enumerate([8, 4, 2, 1]) if val & bit]
+
+note_pattern = [(i, bitmask_to_lanes(tequila_beat_vals[i])) for i in range(len(tequila_beat_vals))]
+
+# Initialize Pygame
+pygame.init()
+pygame.mixer.init()
+
+# Set up the display
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption('ESP32 Rhythm Game')
+
 # Clock for controlling frame rat   e
 clock = pygame.time.Clock()
-FPS = 60
-
-SONG_PATH = 'songs/tequila.mp3'
 
 # Serial setup (adjust port as needed)
 try:
-    ser = serial.Serial('COM4', 115200, timeout=0)  # Adjust COM port as needed
+    ser = serial.Serial(COM_PORT, 115200, timeout=0)  # Adjust COM port as needed
     print("Serial connection established")
 except serial.SerialException:
     print("Failed to open serial port. Check connection and port name.")
     ser = None
 
-# Game states
-MENU = 0
-PLAYING = 1
 game_state = MENU
 
 # Global variables for storing data from ESP32
@@ -81,6 +123,20 @@ class Button:
         text_surface = self.font.render(self.text, True, WHITE)
         text_rect = text_surface.get_rect(center=self.rect.center)
         surface.blit(text_surface, text_rect)
+
+class Note:
+    def __init__(self, lane, spawn_time):
+        self.lane = lane
+        self.spawn_time = spawn_time
+        self.x = lane * LANE_WIDTH + 10
+        self.y = -NOTE_HEIGHT  # Start offscreen
+        self.hit = False
+
+    def update(self, delta_time):
+        self.y += NOTE_SPEED * delta_time
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, GREEN, (self.x, self.y, NOTE_WIDTH, NOTE_HEIGHT))
 
 def play_song():
     pygame.mixer.music.load(SONG_PATH)
@@ -132,6 +188,9 @@ def read_from_serial():
 def main_game():
     global game_state
     running = True
+    start_time = None
+    notes = []
+    current_note_index = 0
     
     # Start serial reading thread
     if ser:
@@ -157,6 +216,29 @@ def main_game():
             # Process and draw start button
             start_button.process(events)
             start_button.draw(screen)
+
+        if game_state == PLAYING:
+            if start_time is None:
+                start_time = pygame.time.get_ticks() / 1000.0  # Convert to seconds
+
+            current_time = pygame.time.get_ticks() / 1000.0 - start_time
+
+            # Spawn notes at the right time
+            while (current_note_index < len(note_pattern) and
+                    current_time >= note_pattern[current_note_index][0] * BEAT_INTERVAL):
+                beat, lane = note_pattern[current_note_index]
+                notes.append(Note(lane, current_time))
+                current_note_index += 1
+
+            # Update and draw notes
+            delta_time = clock.get_time() / 1000.0
+            for note in notes:
+                note.update(delta_time)
+                note.draw(screen)
+
+            # Draw hit line
+            pygame.draw.line(screen, RED, (0, HEIGHT - 100), (WIDTH, HEIGHT - 100), 5)
+
             
             
         # Update display
