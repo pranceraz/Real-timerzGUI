@@ -225,10 +225,15 @@ def main_game():
 
             # Spawn notes at the right time
             while (current_note_index < len(note_pattern) and
-                    current_time >= note_pattern[current_note_index][0] * BEAT_INTERVAL):
-                beat, lane = note_pattern[current_note_index]
-                notes.append(Note(lane, current_time))
+                current_time >= note_pattern[current_note_index][0] * BEAT_INTERVAL):
+                
+                beat, lanes = note_pattern[current_note_index]
+                
+                for lane in lanes:
+                    notes.append(Note(lane, current_time))  # lane is now correctly an int
+                
                 current_note_index += 1
+
 
             # Update and draw notes
             delta_time = clock.get_time() / 1000.0
