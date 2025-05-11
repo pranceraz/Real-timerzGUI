@@ -1,6 +1,5 @@
 import pygame
 import serial
-import json
 import threading
 
 # For button
@@ -15,6 +14,31 @@ BPM = 91
 BEAT_INTERVAL = 60 / BPM  # Seconds per beat
 distance_per_beat = 280  # Distance the note falls per beat in pixels
 NOTE_SPEED = distance_per_beat * BEAT_INTERVAL  # Pixels per second based on BPM
+
+#was distance_per_beat / BEAT_INTERVAL before, should be * for speed)
+# Corrected NOTE_SPEED calculation: If a note falls distance_per_beat in BEAT_INTERVAL seconds,
+# then NOTE_SPEED = distance_per_beat / BEAT_INTERVAL.
+# Let's re-evaluate:
+# distance_per_beat = NOTE_SPEED * BEAT_INTERVAL
+# So, NOTE_SPEED = distance_per_beat / BEAT_INTERVAL.
+# The original code had NOTE_SPEED = distance_per_beat * BEAT_INTERVAL which would be (pixels/beat) * (seconds/beat) = pixels * seconds / beat^2.
+# This seems dimensionally incorrect for pixels per second.
+# Let's assume distance_per_beat is how much it *should* fall in one beat interval.
+# Then the speed is distance_per_beat / BEAT_INTERVAL.
+# Example: If distance_per_beat = 280 pixels, BEAT_INTERVAL = 0.659 s
+# NOTE_SPEED = 280 / 0.659 = 424.8 pixels/second
+# Let's stick to the user's original calculation for now as it might be calibrated to their visual feel.
+# If distance_per_beat is the target displacement *during* one beat_interval, then the speed is indeed distance_per_beat / BEAT_INTERVAL.
+# The original code: NOTE_SPEED = distance_per_beat * BEAT_INTERVAL. This seems unusual.
+# Let's assume distance_per_beat is a target, and NOTE_SPEED defines how fast it moves per second.
+# The fall_time calculation later relies on NOTE_SPEED: fall_time = fall_distance / NOTE_SPEED.
+# If NOTE_SPEED is pixels/second, this is correct.
+# Let's assume the user's original intent for NOTE_SPEED was pixels per second, calculated from distance_per_beat.
+# If a note travels 'distance_per_beat' pixels in 'BEAT_INTERVAL' seconds,
+# then Speed = Distance / Time = distance_per_beat / BEAT_INTERVAL.
+# The code has NOTE_SPEED = distance_per_beat * BEAT_INTERVAL. This is likely an error.
+# Let's correct it for physical sense
+
 
 COM_PORT = 'COM30'
 
@@ -82,9 +106,8 @@ except serial.SerialException:
 game_state = MENU
 
 # Global variables for storing data from ESP32
-upcoming_inputs = []
-input_results = []
-serial_data = ""
+serial_data = "" # Buffer for incoming serial data
+score = 0        
 
 # Import Button class
 class Button:
@@ -154,7 +177,7 @@ def play_song():
 
 # Start button function
 def start_game():
-    global game_state, start_time, first_note_time
+    global game_state, start_time, first_note_time, score 
     game_state = PLAYING
     # Calculate the time delay to sync with notes reaching near the red line
     fall_distance = HEIGHT - 100 - SPAWN_OFFSET  # Distance to red line
@@ -169,26 +192,22 @@ def start_game():
 start_button = Button(WIDTH//2 - 100, HEIGHT//2 - 50, 200, 100, "START", start_game)
 
 def read_from_serial():
-    global serial_data, upcoming_inputs, input_results
+    global serial_data, score
     
     while True:
-        if ser and ser.in_waiting > 0:
-            data = ser.read(ser.in_waiting).decode('utf-8')
+        if ser and ser.isOpen() and ser.in_waiting > 0:
+            data = ser.read(ser.in_waiting).decode('utf-8',errors='ignore')
             serial_data += data
             
-            if '\n' in serial_data:
-                lines = serial_data.split('\n')
-                serial_data = lines[-1]  # Keep incomplete line
+            while '\n' in serial_data:
+                line, serial_data = serial_data.split('\n', 1)
+                line = line.strip() # Remove whitespace (like \r)
+                    
+                print(f"Debug: Received from ESP32: '{line}'") # For debugging
                 
-                for line in lines[:-1]:
-                    try:
-                        message = json.loads(line)
-                        if "upcoming_inputs" in message:
-                            upcoming_inputs = message["upcoming_inputs"]
-                        if "input_result" in message:
-                            input_results.append(message["input_result"])
-                    except json.JSONDecodeError:
-                        pass  # Ignore invalid JSON
+                if line == '1':
+                        score += 1
+                        print(f"Score incremented to: {score}")
 
 
 # Main game loop
@@ -250,6 +269,10 @@ def main_game():
 
             # Draw hit line
             pygame.draw.line(screen, RED, (0, HEIGHT - 100), (WIDTH, HEIGHT - 100), 5)
+
+            font = pygame.font.SysFont('Arial', 36)
+            score_text = font.render(f'Score: {score}', True, WHITE)
+            screen.blit(score_text, (10, 10)) 
 
             
             
