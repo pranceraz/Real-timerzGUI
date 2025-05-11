@@ -5,6 +5,7 @@ import threading
 
 # Initialize Pygame
 pygame.init()
+pygame.mixer.init()
 
 # Set up the display
 WIDTH, HEIGHT = 800, 600
@@ -17,13 +18,15 @@ WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 
-# Clock for controlling frame rate
+# Clock for controlling frame rat   e
 clock = pygame.time.Clock()
 FPS = 60
 
+SONG_PATH = 'tequila.mp3'
+
 # Serial setup (adjust port as needed)
 try:
-    ser = serial.Serial('COM5', 115200, timeout=0)  # Adjust COM port as needed
+    ser = serial.Serial('COM4', 115200, timeout=0)  # Adjust COM port as needed
     print("Serial connection established")
 except serial.SerialException:
     print("Failed to open serial port. Check connection and port name.")
@@ -79,6 +82,11 @@ class Button:
         text_rect = text_surface.get_rect(center=self.rect.center)
         surface.blit(text_surface, text_rect)
 
+def play_song():
+    pygame.mixer.music.load(SONG_PATH)
+    pygame.mixer.music.play()
+
+
 # Start button function
 def start_game():
     global game_state
@@ -86,8 +94,13 @@ def start_game():
         # Send start command to ESP32
         ser.write(b'START\n')
         game_state = PLAYING
+
+        # Start music thread
+        music_thread = threading.Thread(target=play_song, daemon=True)
+        music_thread.start()
     else:
         print("Serial connection not available")
+
 
 # Create start button
 start_button = Button(WIDTH//2 - 100, HEIGHT//2 - 50, 200, 100, "START", start_game)
@@ -114,6 +127,7 @@ def read_from_serial():
                     except json.JSONDecodeError:
                         pass  # Ignore invalid JSON
 
+
 # Main game loop
 def main_game():
     global game_state
@@ -121,7 +135,7 @@ def main_game():
     
     # Start serial reading thread
     if ser:
-        thread = threading.Thread(target=read_from_serial, daemon=True)
+        thread = threading.Thread(target=read_from_serial, daemon=True) 
         thread.start()
 
     while running:
@@ -143,6 +157,9 @@ def main_game():
             # Process and draw start button
             start_button.process(events)
             start_button.draw(screen)
+
+        if game_state == PLAYING: 
+            
             
         # Update display
         pygame.display.flip()
