@@ -9,15 +9,14 @@ WIDTH, HEIGHT = 800, 600
 NUM_LANES = 4
 LANE_WIDTH = WIDTH // NUM_LANES
 NOTE_WIDTH = LANE_WIDTH - 20
-NOTE_HEIGHT = 20
-NOTE_HEIGHT = 20  # The height of the note
-SPAWN_OFFSET = 200
-BPM = 120
+NOTE_HEIGHT = 10  # The height of the note
+SPAWN_OFFSET = 500
+BPM = 91
 BEAT_INTERVAL = 60 / BPM  # Seconds per beat
-distance_per_beat = 100  # Distance the note falls per beat in pixels
+distance_per_beat = 280  # Distance the note falls per beat in pixels
 NOTE_SPEED = distance_per_beat * BEAT_INTERVAL  # Pixels per second based on BPM
 
-COM_PORT = 'COM4'
+COM_PORT = 'COM30'
 
 # Colors
 BLACK = (0, 0, 0)
@@ -132,7 +131,7 @@ class Note:
         self.lane = lane
         self.spawn_time = spawn_time
         self.x = lane * LANE_WIDTH + 10
-        self.y = -NOTE_HEIGHT  # Start offscreen
+        self.y = +NOTE_HEIGHT # Start offscreen
         self.hit = False
 
     def update(self, delta_time):
@@ -142,6 +141,13 @@ class Note:
         pygame.draw.rect(surface, GREEN, (self.x, self.y, NOTE_WIDTH, NOTE_HEIGHT))
 
 def play_song():
+    pygame.time.wait(int(1.5 * 1000))
+    if ser:
+        # Send start command to ESP32 slightly before the notes reach the red line
+        ser.write(b'START\n')
+        
+    else:
+        print("Serial connection not available")
     pygame.mixer.music.load(SONG_PATH)
     pygame.mixer.music.play()
 
@@ -149,20 +155,15 @@ def play_song():
 # Start button function
 def start_game():
     global game_state, start_time, first_note_time
-    if ser:
-        # Send start command to ESP32 slightly before the notes reach the red line
-        ser.write(b'START\n')
-        game_state = PLAYING
+    game_state = PLAYING
+    # Calculate the time delay to sync with notes reaching near the red line
+    fall_distance = HEIGHT - 100 - SPAWN_OFFSET  # Distance to red line
+    fall_time = fall_distance / NOTE_SPEED  # Time in seconds for notes to reach the red line
+    
+    # Start music after the fall time to sync with the first notes
+    threading.Timer(fall_time - 0.1, play_song).start()  # Start the song slightly before notes hit the red line
 
-        # Calculate the time delay to sync with notes reaching near the red line
-        fall_distance = HEIGHT - 100 - SPAWN_OFFSET  # Distance to red line
-        fall_time = fall_distance / NOTE_SPEED  # Time in seconds for notes to reach the red line
-        
-        # Start music after the fall time to sync with the first notes
-        threading.Timer(fall_time - 0.1, play_song).start()  # Start the song slightly before notes hit the red line
-
-    else:
-        print("Serial connection not available")
+    
 
 # Create start button
 start_button = Button(WIDTH//2 - 100, HEIGHT//2 - 50, 200, 100, "START", start_game)
