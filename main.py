@@ -42,7 +42,7 @@ NOTE_SPEED = distance_per_beat / BEAT_INTERVAL  # Pixels per second based on BPM
 # Let's correct it for physical sense
 
 
-COM_PORT = 'COM4'
+COM_PORT = 'COM30'
 
 # Colors
 BLACK = (0, 0, 0)
@@ -159,7 +159,10 @@ def create_hit_effect(x, y):
         particles.append(Particle(x, y, color, size))
 
 def play_song():
-    pygame.time.wait(int(1.5 * 1000))
+    pygame.time.wait(int((.5+.65 +.3) * 1000))
+    pygame.mixer.music.load(SONG_PATH)
+    pygame.mixer.music.play()
+    pygame.time.wait(int((1.6-.65-.3) * 1000))
     if ser:
         # Send start command to ESP32 slightly before the notes reach the red line
         ser.write('T'.encode())
@@ -167,8 +170,7 @@ def play_song():
         
     else:
         print("Serial connection not available")
-    pygame.mixer.music.load(SONG_PATH)
-    pygame.mixer.music.play()
+
 
 play_button = Button(pygame.image.load("assets/Play Rect.png"), (WIDTH // 2, 250), "PLAY", FONT, "#d7fcd4", "white")
 options_button = Button(pygame.image.load("assets/Options Rect.png"), (WIDTH // 2, 375), "OPTIONS", FONT, "#d7fcd4", "white")
