@@ -2,8 +2,10 @@ import pygame
 import serial
 import threading
 import random
+from button import Button
+
 # For button
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 1280, 720
 
 NUM_LANES = 4
 LANE_WIDTH = WIDTH // NUM_LANES
@@ -83,10 +85,12 @@ def bitmask_to_lanes(val):
     return [i for i, bit in enumerate([8, 4, 2, 1]) if val & bit]
 
 note_pattern = [(i, bitmask_to_lanes(tequila_beat_vals[i])) for i in range(len(tequila_beat_vals))]
-
 # Initialize Pygame
 pygame.init()
 pygame.mixer.init()
+
+BG = pygame.image.load("assets/Video Game_synth.png")  # <- rename to match actual file
+FONT = pygame.font.Font("assets/font.ttf", 40)
 
 hit_sound = pygame.mixer.Sound("songs/hitsound.mp3")  
 # Set up the display
@@ -109,47 +113,7 @@ game_state = MENU
 # Global variables for storing data from ESP32
 serial_data = "" # Buffer for incoming serial data
 score = 0        
-
-# Import Button class
-class Button:
-    def __init__(self, x, y, width, height, text='Button', on_click_function=None):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.text = text
-        self.on_click_function = on_click_function
         
-        self.normal_color = (100, 100, 100)
-        self.hover_color = (150, 150, 150)
-        self.pressed_color = (50, 50, 50)
-        self.current_color = self.normal_color
-        
-        self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
-        self.font = pygame.font.SysFont('Arial', 24)
-        
-    def process(self, events):
-        mouse_pos = pygame.mouse.get_pos()
-        
-        # Check hover
-        if self.rect.collidepoint(mouse_pos):
-            self.current_color = self.hover_color
-            
-            # Check click
-            for event in events:
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    self.current_color = self.pressed_color
-                    if self.on_click_function:
-                        self.on_click_function()
-        else:
-            self.current_color = self.normal_color
-            
-    def draw(self, surface):
-        pygame.draw.rect(surface, self.current_color, self.rect)
-        text_surface = self.font.render(self.text, True, WHITE)
-        text_rect = text_surface.get_rect(center=self.rect.center)
-        surface.blit(text_surface, text_rect)
-
 class Note:
     def __init__(self, lane, spawn_time):
         self.lane = lane
@@ -198,12 +162,17 @@ def play_song():
     pygame.time.wait(int(1.5 * 1000))
     if ser:
         # Send start command to ESP32 slightly before the notes reach the red line
-        ser.write(b'START\n')
+        ser.write('T'.encode())
+        print('sent T')
         
     else:
         print("Serial connection not available")
     pygame.mixer.music.load(SONG_PATH)
     pygame.mixer.music.play()
+
+play_button = Button(pygame.image.load("assets/Play Rect.png"), (WIDTH // 2, 250), "PLAY", FONT, "#d7fcd4", "white")
+options_button = Button(pygame.image.load("assets/Options Rect.png"), (WIDTH // 2, 375), "OPTIONS", FONT, "#d7fcd4", "white")
+quit_button = Button(pygame.image.load("assets/Quit Rect.png"), (WIDTH // 2, 500), "QUIT", FONT, "#d7fcd4", "white")
 
 
 # Start button function
@@ -217,10 +186,6 @@ def start_game():
     # Start music after the fall time to sync with the first notes
     threading.Timer(fall_time - 0.1, play_song).start()  # Start the song slightly before notes hit the red line
 
-    
-
-# Create start button
-start_button = Button(WIDTH//2 - 100, HEIGHT//2 - 50, 200, 100, "START", start_game)
 
 def read_from_serial():
     global serial_data, score
@@ -287,17 +252,33 @@ def main_game():
                 running = False
         
         # Clear screen
-        screen.fill(BLACK)
+        scaled_bg = pygame.transform.scale(BG, (WIDTH, HEIGHT))
+        screen.blit(scaled_bg, (0, 0))
 
         if game_state == MENU:
-            # Draw title
-            font = pygame.font.SysFont('Arial', 48)
-            title = font.render("ESP32 Rhythm Game", True, WHITE)
-            screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//4))
+            # Draw Background
+            scaled_bg = pygame.transform.scale(BG, (WIDTH, HEIGHT))
+            screen.blit(scaled_bg, (0, 0))
+
+            #Draw Title
+            title = FONT.render("ESP32 Rhythm Game", True, WHITE)
+            screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//7))
             
             # Process and draw start button
-            start_button.process(events)
-            start_button.draw(screen)
+            mouse_pos = pygame.mouse.get_pos()
+            for button in [play_button, options_button, quit_button]:
+                button.changeColor(mouse_pos)
+                button.update(screen)
+
+            for event in events:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if play_button.checkForInput(mouse_pos):
+                        start_game()
+                    elif options_button.checkForInput(mouse_pos):
+                        print("OPTIONS clicked (you can add a screen here)")
+                    elif quit_button.checkForInput(mouse_pos):
+                        pygame.quit()
+                        exit()
 
         if game_state == PLAYING:
             if start_time is None:
