@@ -40,7 +40,7 @@ NOTE_SPEED = distance_per_beat / BEAT_INTERVAL  # Pixels per second based on BPM
 # Let's correct it for physical sense
 
 
-COM_PORT = 'COM30'
+COM_PORT = 'COM4'
 
 # Colors
 BLACK = (0, 0, 0)
@@ -247,14 +247,32 @@ def read_from_serial():
                         hit_y = HEIGHT - 100  # Example hit line position
                         create_hit_effect(hit_lane_x, hit_y)
 
+# Reset function to clear all game states and return to the menu
+def reset_game():
+    global game_state, score, notes, particles, current_note_index, start_time
+    # Reset everything
+    game_state = MENU
+    score = 0
+    notes = []          # Clear notes
+    particles = []      # Clear particles
+    current_note_index = 0
+    start_time = None   # Reset start time to None (force a fresh start)
+    
+    # Optionally, stop the music if it is playing
+    pygame.mixer.music.stop()
+    print("Game reset to menu.")
+
+
 
 # Main game loop
 def main_game():
-    global game_state
+    global game_state, notes, particles, score, start_time, current_note_index
     running = True
     start_time = None
     notes = []
+    particles = []      # Clear particles
     current_note_index = 0
+
     
     # Start serial reading thread
     if ser:
@@ -298,13 +316,22 @@ def main_game():
                 
                 current_note_index += 1
 
+            # End the game after the specified number of beats
+            if current_note_index >= len(note_pattern) and not notes:
+                reset_game()
 
             # Update and draw notes
             delta_time = clock.get_time() / 1000.0
-            for note in notes:
+            for i in range(len(notes) - 1, -1, -1):  # Iterate backward so we can remove items safely
+                note = notes[i]
                 note.update(delta_time)
                 note.draw(screen)
+                
+                # Remove notes that have fallen past the screen
+                if note.y > HEIGHT:
+                    notes.pop(i)
 
+            # Update and draw particles
             delta_time = clock.get_time() / 1000.0
             for i in range(len(particles) - 1, -1, -1): # Iterate backwards for safe removal
                 particle = particles[i]
@@ -321,8 +348,8 @@ def main_game():
             score_text = font.render(f'Score: {score}', True, WHITE)
             screen.blit(score_text, (10, 10)) 
 
-            
-            
+
+
         # Update display
         pygame.display.flip()
         clock.tick(FPS)
